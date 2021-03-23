@@ -23,8 +23,10 @@ amqp.connect('amqp://localhost', (err, connection) => {
       throw err;
     }
 
-    channel.assertQueue('', {
-      exclusive: true
+    const queue = 'rpc_client'
+
+    channel.assertQueue(queue, {
+      exclusive: false
     }, (err, q) => {
       if (err) {
         throw err;
@@ -33,20 +35,30 @@ amqp.connect('amqp://localhost', (err, connection) => {
       const correlationId = generateUUID();
       const num = parseInt(args[0]);
 
-      console.log(' [x] Requesting fib(%d)', num);
+      console.log(' [x] Requesting fib(%d), corID %s', num, correlationId);
 
       channel.consume(q.queue, msg => {
         if (msg.properties.correlationId === correlationId) {
-          console.log(' [.] Got %s', msg.content.toString());
+          const data = JSON.parse(msg.content);
+          console.log(' [.] Got %s, corID %s', data.fib, data.correlationId);
           setTimeout(() => {
             connection.close();
             process.exit(0);
           }, 500);
         }
-      })
+      }, {
+        noAck: false
+      });
+
+      channel.sendToQueue('rpc_queue',
+        Buffer.from(num.toString()), {
+          correlationId,
+          replyTo: q.queue
+        }
+      );
     });
 
-    console.log(' [x] Sent %s: %s', key, msg);
+    
   });
 
   
